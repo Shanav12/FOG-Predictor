@@ -2,13 +2,9 @@ import torch.nn as nn
 
 
 class FOGLSTMModel(nn.Module):
-    def __init__(self, input_size: int = 3, hidden_size: int = 256,
-                 num_layers: int = 2, output_size: int = 3):
+    def __init__(self, input_size: int = 3, hidden_size: int = 256, num_layers: int = 2, output_size: int = 3):
         super().__init__()
-        self.lstm = nn.LSTM(
-            input_size, hidden_size, num_layers,
-            batch_first=True, dropout=0.3,
-        )
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, dropout=0.3)
         self.fc = nn.Linear(hidden_size, output_size)
 
     def forward(self, x):
@@ -17,13 +13,9 @@ class FOGLSTMModel(nn.Module):
 
 
 class FOGRNNModel(nn.Module):
-    def __init__(self, input_size: int = 3, hidden_size: int = 256,
-                 num_layers: int = 2, output_size: int = 3):
+    def __init__(self, input_size: int = 3, hidden_size: int = 256, num_layers: int = 2, output_size: int = 3):
         super().__init__()
-        self.rnn = nn.RNN(
-            input_size, hidden_size, num_layers,
-            batch_first=True, dropout=0.3,
-        )
+        self.rnn = nn.RNN(input_size, hidden_size, num_layers, batch_first=True, dropout=0.3)
         self.fc = nn.Linear(hidden_size, output_size)
 
     def forward(self, x):

@@ -2,10 +2,9 @@ import os
 import glob
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import StandardScaler
 import torch
+from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, TensorDataset
-
 from config import (
     DEFOG_DIR, TDCSFOG_DIR,
     FEATURES, LABELS,
@@ -45,8 +44,8 @@ def normalize_sessions(df: pd.DataFrame) -> pd.DataFrame:
 def make_windows(df: pd.DataFrame):
     X, y, subjects = [], [], []
     for session_id, group in df.groupby('Id'):
-        group  = group.sort_values('Time').reset_index(drop=True)
-        feats  = group[FEATURES].values
+        group = group.sort_values('Time').reset_index(drop=True)
+        feats = group[FEATURES].values
         labels = group[LABELS].values
         for start in range(0, len(group) - WINDOW_SIZE, STEP_SIZE):
             end = start + WINDOW_SIZE
@@ -66,10 +65,7 @@ def subject_split(X: np.ndarray, y: np.ndarray, subjects: np.ndarray):
 
 
 def to_dataloader(X: np.ndarray, y: np.ndarray, shuffle: bool = False) -> DataLoader:
-    ds = TensorDataset(
-        torch.tensor(X, dtype=torch.float32),
-        torch.tensor(y, dtype=torch.float32),
-    )
+    ds = TensorDataset(torch.tensor(X, dtype=torch.float32),torch.tensor(y, dtype=torch.float32))
     return DataLoader(ds, batch_size=BATCH_SIZE, shuffle=shuffle)
 
 
@@ -85,8 +81,4 @@ def build_dataloaders():
     s_all = np.concatenate([s1, s2], axis=0)
 
     X_train, X_val, y_train, y_val = subject_split(X_all, y_all, s_all)
-    return (
-        to_dataloader(X_train, y_train, shuffle=True),
-        to_dataloader(X_val,   y_val),
-        y_train,
-    )
+    return (to_dataloader(X_train, y_train, shuffle=True), to_dataloader(X_val,   y_val), y_train)

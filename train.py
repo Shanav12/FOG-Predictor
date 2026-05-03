@@ -2,52 +2,47 @@ import numpy as np
 import torch
 import torch.nn as nn
 import pandas as pd
-from sklearn.metrics import (
-    average_precision_score,
-    precision_score, recall_score, f1_score,
-    PrecisionRecallDisplay,
-)
 import matplotlib.pyplot as plt
+from data import build_dataloaders
+from models import FOGLSTMModel, FOGRNNModel, FOG1DCNNModel
 from config import (
     DEVICE, EPOCHS, LEARNING_RATE, LABELS,
     LSTM_MODEL_PATH, RNN_MODEL_PATH, CNN_MODEL_PATH, LSTM_FOCAL_MODEL_PATH,
     FOCAL_ALPHA, FOCAL_GAMMA,
 )
-from data import build_dataloaders
-from models import FOGLSTMModel, FOGRNNModel, FOG1DCNNModel
+from sklearn.metrics import (
+    average_precision_score,
+    precision_score, recall_score, f1_score,
+    PrecisionRecallDisplay,
+)
 
 
 
 def build_pos_weight_criterion(y_train: np.ndarray) -> nn.BCEWithLogitsLoss:
-    pos_weight = torch.tensor(
-        [(y_train[:, i] == 0).sum() / max((y_train[:, i] == 1).sum(), 1)
-         for i in range(y_train.shape[1])],
+    pos_weight = torch.tensor([(y_train[:, i] == 0).sum() / max((y_train[:, i] == 1).sum(), 1) 
+                               for i in range(y_train.shape[1])],
         dtype=torch.float32,
     ).to(DEVICE)
     return nn.BCEWithLogitsLoss(pos_weight = pos_weight)
 
 
 class FocalLoss(nn.Module):
-    def __init__(self, alpha: float = FOCAL_ALPHA, gamma: float = FOCAL_GAMMA):
+    def __init__(self, alpha: float=FOCAL_ALPHA, gamma: float=FOCAL_GAMMA):
         super().__init__()
         self.alpha = alpha
         self.gamma = gamma
 
     def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-        bce  = nn.functional.binary_cross_entropy_with_logits(
-            logits, targets, reduction='none')
+        bce  = nn.functional.binary_cross_entropy_with_logits(logits, targets, reduction='none')
         p_t  = torch.exp(-bce)
         loss = self.alpha * (1 - p_t) ** self.gamma * bce
         return loss.mean()
 
 
-
-def train(model, train_loader, val_loader, criterion,
-          save_path: str, epochs: int = EPOCHS) -> None:
+def train(model, train_loader, val_loader, criterion, save_path: str, epochs: int=EPOCHS) -> None:
     model.to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, patience=3, factor=0.5)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, factor=0.5)
     best_val = float('inf')
 
     for epoch in range(epochs):
@@ -67,7 +62,7 @@ def train(model, train_loader, val_loader, criterion,
                 xb, yb = xb.to(DEVICE), yb.to(DEVICE)
                 val_loss += criterion(model(xb), yb).item()
         avg_train = train_loss / len(train_loader)
-        avg_val   = val_loss   / len(val_loader)
+        avg_val = val_loss / len(val_loader)
         scheduler.step(avg_val)
         if avg_val < best_val:
             best_val = avg_val
@@ -78,7 +73,7 @@ def train(model, train_loader, val_loader, criterion,
     print(f"Best validation loss: {best_val:.4f}")
 
 
-def _collect_preds(model, val_loader):
+def collect_preds(model, val_loader):
     model.eval()
     all_preds, all_labels = [], []
     with torch.no_grad():
@@ -90,9 +85,8 @@ def _collect_preds(model, val_loader):
 
 
 
-def evaluate(model, val_loader, model_name: str = 'model',
-             threshold: float = 0.5, plot: bool = True) -> tuple:
-    preds, labels = _collect_preds(model, val_loader)
+def evaluate(model, val_loader, model_name: str='model', threshold: float=0.5, plot: bool=True) -> tuple:
+    preds, labels = collect_preds(model, val_loader)
     binary = (preds >= threshold).astype(int)
     aps = []
     for i, name in enumerate(LABELS):
@@ -121,29 +115,28 @@ def evaluate(model, val_loader, model_name: str = 'model',
     return preds, labels
 
 
-def error_analysis(preds: np.ndarray, labels: np.ndarray,
-                   model_name: str = 'model', threshold: float = 0.5) -> None:
+def error_analysis(preds: np.ndarray, labels: np.ndarray, model_name: str='model', threshold: float=0.5) -> None:
     binary = (preds >= threshold).astype(int)
     for i, name in enumerate(LABELS):
-        pos  = labels[:, i] == 1
-        neg  = labels[:, i] == 0
-        tp   = int(((binary[:, i] == 1) & pos).sum())
-        fp   = int(((binary[:, i] == 1) & neg).sum())
-        fn   = int(((binary[:, i] == 0) & pos).sum())
-        tot  = int(pos.sum())
-        print(f"{name:<20} total={tot:>5}  "
-              f"TP={tp:>4}  FP={fp:>5}  FN={fn:>4}"
-              f"miss={fn/max(tot,1):.1%}")
+        pos = labels[:, i] == 1
+        neg = labels[:, i] == 0
+        tp = int(((binary[:, i] == 1) & pos).sum())
+        fp = int(((binary[:, i] == 1) & neg).sum())
+        fn = int(((binary[:, i] == 0) & pos).sum())
+        tot = int(pos.sum())
+        print(f"""
+              {name:<20} total={tot:>5}\n
+              TP={tp:>4}  FP={fp:>5}  FN={fn:>4}\n
+              f"miss={fn/max(tot,1):.1%}
+        """)
 
 
-def tune_thresholds(preds: np.ndarray, labels: np.ndarray,
-                    model_name: str = 'model') -> list:
+def tune_thresholds(preds: np.ndarray, labels: np.ndarray, model_name: str='model') -> list:
     best_thresholds = []
-    for i, name in enumerate(LABELS):
+    for i, _ in enumerate(LABELS):
         best_t, best_f1 = 0.5, 0.0
         for t in np.arange(0.05, 0.95, 0.05):
-            f1 = f1_score(labels[:, i], (preds[:, i] >= t).astype(int),
-                          zero_division=0)
+            f1 = f1_score(labels[:, i], (preds[:, i] >= t).astype(int), zero_division=0)
             if f1 > best_f1:
                 best_f1, best_t = f1, float(t)
         best_thresholds.append(best_t)
